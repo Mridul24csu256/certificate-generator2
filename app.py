@@ -27,20 +27,15 @@ if template_file:
         # Select which columns to use
         selected_columns = st.multiselect("Select Columns to Print", df.columns)
 
-        # --- Font Library (fixed, no upload) ---
+        # Upload custom font
         st.subheader("📂 Font Settings")
-        fonts = {
-            "Arial": "arial.ttf",
-            "Times New Roman": "times.ttf",
-            "Courier": "cour.ttf",
-        }
+        font_file = st.file_uploader("Upload Font File (TTF)", type=["ttf"])
 
         # Settings for each column
         column_settings = {}
         for col in selected_columns:
             st.subheader(f"⚙️ Settings for {col}")
 
-            font_choice = st.selectbox(f"Choose font for {col}", list(fonts.keys()), key=f"font_{col}")
             font_size = st.slider(f"Font size for {col}", 10, 100, 40, key=f"size_{col}")
             font_color = st.color_picker(f"Font color for {col}", "#000000", key=f"color_{col}")
 
@@ -50,7 +45,6 @@ if template_file:
             alignment = st.selectbox(f"Text alignment for {col}", ["Left", "Center", "Right"], key=f"align_{col}")
 
             column_settings[col] = {
-                "font": font_choice,
                 "size": font_size,
                 "color": font_color,
                 "pos": (x, y),
@@ -70,17 +64,22 @@ if template_file:
 
         # ================= Preview First Certificate =================
         if st.button("👀 Preview First Certificate"):
-            sample_row = df.iloc[0]  # pick first row
+            if font_file:
+                font_path = BytesIO(font_file.read())
+            else:
+                st.error("⚠️ Please upload a font file first!")
+                st.stop()
+
+            sample_row = df.iloc[0]
             cert = template.copy()
             draw = ImageDraw.Draw(cert)
 
             for col in selected_columns:
                 settings = column_settings[col]
-                font_path = fonts.get(settings["font"])
                 try:
                     font = ImageFont.truetype(font_path, settings["size"])
                 except:
-                    st.warning(f"⚠️ Font {settings['font']} not found, using default.")
+                    st.warning("⚠️ Could not load font, using default.")
                     font = ImageFont.load_default()
 
                 text = str(sample_row[col])
@@ -90,6 +89,12 @@ if template_file:
 
         # ================= Generate All Certificates =================
         if st.button("🎉 Generate All Certificates"):
+            if font_file:
+                font_path = BytesIO(font_file.read())
+            else:
+                st.error("⚠️ Please upload a font file first!")
+                st.stop()
+
             os.makedirs("certificates", exist_ok=True)
 
             zip_buffer = BytesIO()
@@ -100,7 +105,6 @@ if template_file:
 
                     for col in selected_columns:
                         settings = column_settings[col]
-                        font_path = fonts.get(settings["font"])
                         try:
                             font = ImageFont.truetype(font_path, settings["size"])
                         except:
