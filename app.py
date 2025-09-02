@@ -11,7 +11,7 @@ st.title("🖼 Certificate Generator")
 template_file = st.file_uploader("Upload Certificate Template (PNG/JPG)", type=["png", "jpg", "jpeg"])
 if template_file:
     template = Image.open(template_file).convert("RGB")
-    st.image(template, caption="Certificate Template Preview", use_column_width=True)
+    st.image(template, caption="Certificate Template Preview", use_container_width=True)
 
     # Upload data file
     data_file = st.file_uploader("Upload Data File (CSV/Excel)", type=["csv", "xlsx"])
@@ -27,9 +27,8 @@ if template_file:
         # Select which columns to use
         selected_columns = st.multiselect("Select Columns to Print", df.columns)
 
-        # Upload custom font
-        st.subheader("📂 Font Settings")
-        font_file = st.file_uploader("Upload Font File (TTF)", type=["ttf"])
+        # Upload font
+        font_file = st.file_uploader("Upload Font File (.ttf)", type=["ttf"])
 
         # Settings for each column
         column_settings = {}
@@ -42,59 +41,32 @@ if template_file:
             x = st.number_input(f"X position (pixels) for {col}", min_value=0, max_value=template.width, value=100, key=f"x_{col}")
             y = st.number_input(f"Y position (pixels) for {col}", min_value=0, max_value=template.height, value=100, key=f"y_{col}")
 
-            alignment = st.selectbox(f"Text alignment for {col}", ["Left", "Center", "Right"], key=f"align_{col}")
-
-            column_settings[col] = {
-                "size": font_size,
-                "color": font_color,
-                "pos": (x, y),
-                "align": alignment,
-            }
-
-        # Function to draw text with alignment
-        def draw_text(draw, text, font, position, fill, align):
-            x, y = position
-            bbox = draw.textbbox((0, 0), text, font=font)
-            text_width = bbox[2] - bbox[0]
-            if align == "Center":
-                x = x - text_width // 2
-            elif align == "Right":
-                x = x - text_width
-            draw.text((x, y), text, font=font, fill=fill)
+            column_settings[col] = {"size": font_size, "color": font_color, "pos": (x, y)}
 
         # ================= Preview First Certificate =================
         if st.button("👀 Preview First Certificate"):
-            if font_file:
-                font_path = BytesIO(font_file.read())
-            else:
-                st.error("⚠️ Please upload a font file first!")
-                st.stop()
-
-            sample_row = df.iloc[0]
+            sample_row = df.iloc[0]  # pick first row
             cert = template.copy()
             draw = ImageDraw.Draw(cert)
 
             for col in selected_columns:
                 settings = column_settings[col]
                 try:
-                    font = ImageFont.truetype(font_path, settings["size"])
+                    if font_file:
+                        font = ImageFont.truetype(font_file, settings["size"])
+                    else:
+                        font = ImageFont.load_default()
                 except:
-                    st.warning("⚠️ Could not load font, using default.")
                     font = ImageFont.load_default()
 
                 text = str(sample_row[col])
-                draw_text(draw, text, font, settings["pos"], settings["color"], settings["align"])
+                x, y = settings["pos"]
+                draw.text((x, y), text, font=font, fill=settings["color"])
 
-            st.image(cert, caption="Preview Certificate", use_column_width=True)
+            st.image(cert, caption="Preview Certificate", use_container_width=True)
 
         # ================= Generate All Certificates =================
         if st.button("🎉 Generate All Certificates"):
-            if font_file:
-                font_path = BytesIO(font_file.read())
-            else:
-                st.error("⚠️ Please upload a font file first!")
-                st.stop()
-
             os.makedirs("certificates", exist_ok=True)
 
             zip_buffer = BytesIO()
@@ -106,12 +78,16 @@ if template_file:
                     for col in selected_columns:
                         settings = column_settings[col]
                         try:
-                            font = ImageFont.truetype(font_path, settings["size"])
+                            if font_file:
+                                font = ImageFont.truetype(font_file, settings["size"])
+                            else:
+                                font = ImageFont.load_default()
                         except:
                             font = ImageFont.load_default()
 
                         text = str(row[col])
-                        draw_text(draw, text, font, settings["pos"], settings["color"], settings["align"])
+                        x, y = settings["pos"]
+                        draw.text((x, y), text, font=font, fill=settings["color"])
 
                     cert_filename = f"{row[selected_columns[0]]}_certificate.png"
                     cert_path = os.path.join("certificates", cert_filename)
