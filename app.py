@@ -1,109 +1,97 @@
 import streamlit as st
 import pandas as pd
 from PIL import Image, ImageDraw, ImageFont
-import io
-import zipfile
-import os
 from streamlit_drawable_canvas import st_canvas
+import numpy as np
+import io
 
-st.title("🎓 Certificate Generator with Click-to-Place & Font Library")
+st.title("📜 Certificate Generator")
 
-# 📂 Font library
-font_folder = "fonts"
-if not os.path.exists(font_folder):
-    os.makedirs(font_folder)
+# Upload certificate template
+template_file = st.file_uploader("Upload Certificate Template (PNG/JPG)", type=["png", "jpg", "jpeg"])
 
-available_fonts = [f for f in os.listdir(font_folder) if f.endswith(".ttf")]
-if not available_fonts:
-    st.error("⚠️ No fonts found in 'fonts/' folder. Please add .ttf files there.")
-else:
-    # Font options (global for all columns)
-    selected_font = st.selectbox("Choose a font", available_fonts)
-    font_path = os.path.join(font_folder, selected_font)
+# Upload Excel/CSV data
+data_file = st.file_uploader("Upload Data File (CSV/XLSX)", type=["csv", "xlsx"])
 
-    font_size = st.number_input("Font Size", value=40, step=1)
-    font_color = st.color_picker("Font Color", "#000000")  # default black
+# ✅ Built-in fonts (place .ttf files in a `fonts` folder inside repo)
+FONT_LIBRARY = {
+    "Arial": "fonts/arial.ttf",
+    "Times New Roman": "fonts/times.ttf",
+    "Courier New": "fonts/cour.ttf"
+}
 
-# 📑 Upload Excel and Template
-excel_file = st.file_uploader("Upload Excel file", type=["xlsx"])
-template_file = st.file_uploader("Upload Certificate Template (JPG/PNG)", type=["jpg", "jpeg", "png"])
-
-if excel_file and template_file and available_fonts:
-    df = pd.read_excel(excel_file)
-    st.write("📑 Columns found in Excel:", list(df.columns))
-
-    # Select columns
-    selected_columns = st.multiselect("Select columns to include on certificate", df.columns)
-
+if template_file and data_file:
+    # Load template
     template = Image.open(template_file).convert("RGB")
+    template_np = np.array(template)  # ✅ Convert to numpy for st_canvas
 
-    # Dictionary to store positions
-    positions = {}
+    # Load data
+    if data_file.name.endswith(".csv"):
+        df = pd.read_csv(data_file)
+    else:
+        df = pd.read_excel(data_file)
 
+    st.write("Preview of Uploaded Data:")
+    st.dataframe(df.head())
+
+    # Select columns to use
+    selected_columns = st.multiselect("Select columns to use in certificate", df.columns.tolist())
+
+    text_settings = {}
     for col in selected_columns:
-        st.subheader(f"Set position for: {col}")
-        st.write("👉 Click on the certificate where you want this field to appear:")
+        st.subheader(f"⚙️ Settings for {col}")
 
+        # Canvas for positioning
+        st.write("Drag to position:")
         canvas_result = st_canvas(
             fill_color="rgba(255, 255, 255, 0)",
             stroke_width=0,
-            stroke_color="rgba(0,0,0,0)",
-            background_image=template,
+            stroke_color="",
+            background_image=template_np,
             update_streamlit=True,
             height=template.height,
             width=template.width,
-            drawing_mode="point",
+            drawing_mode="transform",
             key=f"canvas_{col}"
         )
 
-        if canvas_result.json_data and len(canvas_result.json_data["objects"]) > 0:
-            last_obj = canvas_result.json_data["objects"][-1]
-            x, y = last_obj["left"], last_obj["top"]
-            positions[col] = (x, y)
+        # Save position
+        x, y = 100, 100
+        if canvas_result.json_data is not None and len(canvas_result.json_data["objects"]) > 0:
+            obj = canvas_result.json_data["objects"][-1]
+            x, y = int(obj["left"]), int(obj["top"])
 
-    # Preview one certificate
-    if st.button("Preview Sample Certificate"):
-        if len(positions) < len(selected_columns):
-            st.error("⚠️ Please set positions for all selected fields first.")
-        else:
-            row = df.iloc[0]
-            cert = template.copy()
-            draw = ImageDraw.Draw(cert)
+        # Font selection
+        font_choice = st.selectbox(f"Font for {col}", list(FONT_LIBRARY.keys()), key=f"font_{col}")
+        font_size = st.slider(f"Font Size for {col}", 10, 100, 30, key=f"size_{col}")
+        font_color = st.color_picker(f"Font Color for {col}", "#000000", key=f"color_{col}")
 
-            for col in selected_columns:
-                text = str(row[col])
-                x, y = positions[col]
-                font = ImageFont.truetype(font_path, font_size)
-                draw.text((x, y), text, font=font, fill=font_color)
+        text_settings[col] = {
+            "x": x,
+            "y": y,
+            "font": FONT_LIBRARY[font_choice],
+            "size": font_size,
+            "color": font_color
+        }
 
-            st.image(cert, caption="Sample Certificate Preview")
+    if st.button("🎉 Generate Certificates"):
+        output_zip = io.BytesIO()
+        import zipfile
+        with zipfile.ZipFile(output_zip, "w") as zipf:
+            for idx, row in df.iterrows():
+                cert = template.copy()
+                draw = ImageDraw.Draw(cert)
+                for col, settings in text_settings.items():
+                    font = ImageFont.truetype(settings["font"], settings["size"])
+                    draw.text((settings["x"], settings["y"]), str(row[col]), font=font, fill=settings["color"])
+                cert_bytes = io.BytesIO()
+                cert.save(cert_bytes, format="PNG")
+                zipf.writestr(f"certificate_{idx+1}.png", cert_bytes.getvalue())
 
-    # Generate all certificates
-    if st.button("Generate All Certificates"):
-        if len(positions) < len(selected_columns):
-            st.error("⚠️ Please set positions for all selected fields first.")
-        else:
-            zip_buffer = io.BytesIO()
-            with zipfile.ZipFile(zip_buffer, "w") as zf:
-                for _, row in df.iterrows():
-                    cert = template.copy()
-                    draw = ImageDraw.Draw(cert)
-
-                    for col in selected_columns:
-                        text = str(row[col])
-                        x, y = positions[col]
-                        font = ImageFont.truetype(font_path, font_size)
-                        draw.text((x, y), text, font=font, fill=font_color)
-
-                    file_name = f"{row[selected_columns[0]]}.jpg"
-                    img_bytes = io.BytesIO()
-                    cert.save(img_bytes, format="JPEG")
-                    zf.writestr(file_name, img_bytes.getvalue())
-
-            st.success("✅ Certificates generated successfully!")
-            st.download_button(
-                label="📥 Download All Certificates (ZIP)",
-                data=zip_buffer.getvalue(),
-                file_name="certificates.zip",
-                mime="application/zip"
-            )
+        st.success("✅ Certificates generated successfully!")
+        st.download_button(
+            "⬇️ Download All Certificates as ZIP",
+            data=output_zip.getvalue(),
+            file_name="certificates.zip",
+            mime="application/zip"
+        )
