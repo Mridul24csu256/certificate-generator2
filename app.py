@@ -27,20 +27,13 @@ if template_file:
         # Select which columns to use
         selected_columns = st.multiselect("Select Columns to Print", df.columns)
 
-        # --- Font Library + Upload Option ---
+        # --- Font Library (fixed, no upload) ---
         st.subheader("📂 Font Settings")
-        uploaded_font = st.file_uploader("Upload Custom Font (.ttf)", type=["ttf"], key="font_upload")
         fonts = {
             "Arial": "arial.ttf",
             "Times New Roman": "times.ttf",
             "Courier": "cour.ttf",
         }
-        if uploaded_font:
-            font_path = os.path.join("uploaded_fonts", uploaded_font.name)
-            os.makedirs("uploaded_fonts", exist_ok=True)
-            with open(font_path, "wb") as f:
-                f.write(uploaded_font.getbuffer())
-            fonts[uploaded_font.name] = font_path
 
         # Settings for each column
         column_settings = {}
