@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 from PIL import Image, ImageDraw, ImageFont
 import os
+import zipfile
+from io import BytesIO
 
 st.title("🖼 Certificate Generator")
 
@@ -25,7 +27,7 @@ if template_file:
         # Select which columns to use
         selected_columns = st.multiselect("Select Columns to Print", df.columns)
 
-        # Font library (add more .ttf files in repo if you want)
+        # Font library (make sure .ttf are in repo or use system fonts)
         fonts = {
             "Arial": "arial.ttf",
             "Times New Roman": "times.ttf",
@@ -46,26 +48,58 @@ if template_file:
 
             column_settings[col] = {"font": font_choice, "size": font_size, "color": font_color, "pos": (x, y)}
 
-        # Generate certificates
-        if st.button("🎉 Generate Certificates"):
+        # ================= Preview First Certificate =================
+        if st.button("👀 Preview First Certificate"):
+            sample_row = df.iloc[0]  # pick first row
+            cert = template.copy()
+            draw = ImageDraw.Draw(cert)
+
+            for col in selected_columns:
+                settings = column_settings[col]
+                try:
+                    font = ImageFont.truetype(fonts[settings["font"]], settings["size"])
+                except:
+                    font = ImageFont.load_default()
+
+                text = str(sample_row[col])
+                x, y = settings["pos"]
+                draw.text((x, y), text, font=font, fill=settings["color"])
+
+            st.image(cert, caption="Preview Certificate", use_column_width=True)
+
+        # ================= Generate All Certificates =================
+        if st.button("🎉 Generate All Certificates"):
             os.makedirs("certificates", exist_ok=True)
-            for idx, row in df.iterrows():
-                cert = template.copy()
-                draw = ImageDraw.Draw(cert)
 
-                for col in selected_columns:
-                    settings = column_settings[col]
-                    try:
-                        font = ImageFont.truetype(fonts[settings["font"]], settings["size"])
-                    except:
-                        font = ImageFont.load_default()
+            zip_buffer = BytesIO()
+            with zipfile.ZipFile(zip_buffer, "w") as zipf:
+                for idx, row in df.iterrows():
+                    cert = template.copy()
+                    draw = ImageDraw.Draw(cert)
 
-                    text = str(row[col])
-                    x, y = settings["pos"]
-                    draw.text((x, y), text, font=font, fill=settings["color"])
+                    for col in selected_columns:
+                        settings = column_settings[col]
+                        try:
+                            font = ImageFont.truetype(fonts[settings["font"]], settings["size"])
+                        except:
+                            font = ImageFont.load_default()
 
-                cert_path = f"certificates/{row[selected_columns[0]]}_certificate.png"
-                cert.save(cert_path)
+                        text = str(row[col])
+                        x, y = settings["pos"]
+                        draw.text((x, y), text, font=font, fill=settings["color"])
 
+                    cert_filename = f"{row[selected_columns[0]]}_certificate.png"
+                    cert_path = os.path.join("certificates", cert_filename)
+                    cert.save(cert_path)
+
+                    # Add to ZIP
+                    zipf.write(cert_path, cert_filename)
+
+            zip_buffer.seek(0)
             st.success("✅ Certificates generated successfully!")
-            st.write("Certificates saved in `certificates/` folder.")
+            st.download_button(
+                label="⬇️ Download All Certificates (ZIP)",
+                data=zip_buffer,
+                file_name="certificates.zip",
+                mime="application/zip",
+            )
