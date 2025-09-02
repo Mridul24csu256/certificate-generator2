@@ -13,6 +13,9 @@ if template_file:
     template = Image.open(template_file).convert("RGB")
     st.image(template, caption="Certificate Template Preview", use_container_width=True)
 
+    # Upload font file
+    font_file = st.file_uploader("Upload Custom Font (.ttf)", type=["ttf"])
+
     # Upload data file
     data_file = st.file_uploader("Upload Data File (CSV/Excel)", type=["csv", "xlsx"])
     if data_file:
@@ -26,9 +29,6 @@ if template_file:
 
         # Select which columns to use
         selected_columns = st.multiselect("Select Columns to Print", df.columns)
-
-        # Upload font
-        font_file = st.file_uploader("Upload Font File (.ttf)", type=["ttf"])
 
         # Settings for each column
         column_settings = {}
@@ -53,7 +53,7 @@ if template_file:
                 settings = column_settings[col]
                 try:
                     if font_file:
-                        font = ImageFont.truetype(font_file, settings["size"])
+                        font = ImageFont.truetype(BytesIO(font_file.getvalue()), settings["size"])
                     else:
                         font = ImageFont.load_default()
                 except:
@@ -79,7 +79,7 @@ if template_file:
                         settings = column_settings[col]
                         try:
                             if font_file:
-                                font = ImageFont.truetype(font_file, settings["size"])
+                                font = ImageFont.truetype(BytesIO(font_file.getvalue()), settings["size"])
                             else:
                                 font = ImageFont.load_default()
                         except:
